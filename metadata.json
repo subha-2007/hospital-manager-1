@@ -1,0 +1,8 @@
+{
+  "name": "Aegis Clinical — Hospital DB & RBAC Manager",
+  "description": "Hospital database management system with strict Role-Based Access Control (RBAC) separating Hospital Administrators and Medical Staff permissions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

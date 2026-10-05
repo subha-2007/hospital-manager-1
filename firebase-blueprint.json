@@ -1,0 +1,614 @@
+{
+  "entities": {
+    "AdminGrant": {
+      "title": "AdminGrant",
+      "description": "Trusted administrator membership record granting Tier 1 hospital administration privileges.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the administrator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "grantedBy": {
+          "type": "string",
+          "description": "UID of the administrator who granted this role.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roleLabel": {
+          "type": "string",
+          "description": "Administrative designation label.",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when admin access was granted."
+        }
+      },
+      "required": ["uid", "grantedBy", "roleLabel", "createdAt"]
+    },
+    "StaffProfile": {
+      "title": "StaffProfile",
+      "description": "Non-PII hospital staff directory profile and RBAC role assignment.",
+      "type": "object",
+      "properties": {
+        "staffId": {
+          "type": "string",
+          "description": "Unique identifier for the staff record.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the workspace owner or staff member.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Clinical display name and credentials.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "role": {
+          "type": "string",
+          "description": "Assigned RBAC role tier within the hospital.",
+          "enum": ["admin", "physician", "nurse", "lab_tech"],
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "department": {
+          "type": "string",
+          "description": "Assigned clinical or administrative department.",
+          "enum": ["Cardiology", "Neurology", "Emergency", "Oncology", "Pediatrics", "ICU", "Administration"],
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "badgeId": {
+          "type": "string",
+          "description": "Hospital staff badge code (non-PII).",
+          "minLength": 3,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "shift": {
+          "type": "string",
+          "description": "Current assigned duty shift.",
+          "enum": ["Day (07:00-19:00)", "Night (19:00-07:00)", "On-Call"],
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "status": {
+          "type": "string",
+          "description": "Current operational status.",
+          "enum": ["On Duty", "Off Duty", "In Surgery"],
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last modification."
+        }
+      },
+      "required": ["staffId", "ownerId", "fullName", "role", "department", "badgeId", "shift", "status", "createdAt", "updatedAt"]
+    },
+    "PatientRecord": {
+      "title": "PatientRecord",
+      "description": "Hospital patient admission and clinical care record with tiered RBAC access.",
+      "type": "object",
+      "properties": {
+        "patientId": {
+          "type": "string",
+          "description": "Document ID of the patient record.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "mrn": {
+          "type": "string",
+          "description": "Medical Record Number identifier.",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Patient chart name.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "age": {
+          "type": "number",
+          "description": "Patient age in years."
+        },
+        "bloodType": {
+          "type": "string",
+          "description": "ABO/Rh blood group.",
+          "enum": ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+          "minLength": 2,
+          "maxLength": 8
+        },
+        "department": {
+          "type": "string",
+          "description": "Admitted clinical ward.",
+          "enum": ["Cardiology", "Neurology", "Emergency", "Oncology", "Pediatrics", "ICU"],
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "roomNumber": {
+          "type": "string",
+          "description": "Assigned ward bed/room code.",
+          "minLength": 1,
+          "maxLength": 20,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "triageStatus": {
+          "type": "string",
+          "description": "Clinical acuity and admission state (Discharged is terminal for non-admins).",
+          "enum": ["Critical", "Observation", "Stable", "Discharged"],
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "diagnosisSummary": {
+          "type": "string",
+          "description": "Primary clinical diagnosis and assessment.",
+          "minLength": 2,
+          "maxLength": 500
+        },
+        "vitalSigns": {
+          "type": "string",
+          "description": "Latest recorded telemetry vitals (HR, BP, SpO2, Temp).",
+          "minLength": 2,
+          "maxLength": 200
+        },
+        "clinicalNotes": {
+          "type": "string",
+          "description": "Attending physician or nursing progress notes.",
+          "minLength": 0,
+          "maxLength": 1000
+        },
+        "insuranceStatus": {
+          "type": "string",
+          "description": "Administrative billing and coverage clearance state (Admin-only write).",
+          "enum": ["Verified", "Pending Review", "Self-Pay", "Gov-Coverage"],
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "assignedStaffId": {
+          "type": "string",
+          "description": "UID of the attending medical staff member assigned to this patient.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "assignedStaffName": {
+          "type": "string",
+          "description": "Display name of the assigned clinician.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID of the administrator who admitted/created the record.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of admission record creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": [
+        "patientId",
+        "mrn",
+        "fullName",
+        "age",
+        "bloodType",
+        "department",
+        "roomNumber",
+        "triageStatus",
+        "diagnosisSummary",
+        "vitalSigns",
+        "clinicalNotes",
+        "insuranceStatus",
+        "assignedStaffId",
+        "assignedStaffName",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ClinicalOrder": {
+      "title": "ClinicalOrder",
+      "description": "Subcollection order for medication, labs, or procedures tied to a parent patient record.",
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "description": "Unique identifier for the clinical order.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "patientId": {
+          "type": "string",
+          "description": "Parent patient document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "orderType": {
+          "type": "string",
+          "description": "Category of medical order.",
+          "enum": ["Medication", "Lab Panel", "Imaging", "Procedure"],
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "description": {
+          "type": "string",
+          "description": "Dosage, panel specification, or clinical instruction.",
+          "minLength": 2,
+          "maxLength": 300
+        },
+        "priority": {
+          "type": "string",
+          "description": "Clinical urgency level.",
+          "enum": ["STAT", "Urgent", "Routine"],
+          "minLength": 2,
+          "maxLength": 20
+        },
+        "orderStatus": {
+          "type": "string",
+          "description": "Execution status of the order (Completed/Cancelled are terminal for non-admins).",
+          "enum": ["Pending", "In Progress", "Completed", "Cancelled"],
+          "minLength": 2,
+          "maxLength": 24
+        },
+        "orderedBy": {
+          "type": "string",
+          "description": "UID of the clinician who created the order.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "orderedByName": {
+          "type": "string",
+          "description": "Name of ordering clinician.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "assignedStaffId": {
+          "type": "string",
+          "description": "UID of the staff member responsible for parent patient.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of order creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last order update."
+        }
+      },
+      "required": [
+        "orderId",
+        "patientId",
+        "orderType",
+        "description",
+        "priority",
+        "orderStatus",
+        "orderedBy",
+        "orderedByName",
+        "assignedStaffId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "DepartmentConfig": {
+      "title": "DepartmentConfig",
+      "description": "Hospital ward bed capacity, diversion state, and administrative budget allocation.",
+      "type": "object",
+      "properties": {
+        "deptId": {
+          "type": "string",
+          "description": "Department identifier.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Clinical department name.",
+          "enum": ["Cardiology", "Neurology", "Emergency", "Oncology", "Pediatrics", "ICU"],
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "headPhysician": {
+          "type": "string",
+          "description": "Department Chief name.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "totalBeds": {
+          "type": "number",
+          "description": "Total licensed bed capacity."
+        },
+        "occupiedBeds": {
+          "type": "number",
+          "description": "Currently occupied beds."
+        },
+        "diversionStatus": {
+          "type": "string",
+          "description": "Operational intake status.",
+          "enum": ["Normal Operations", "Advisory", "Critical Capacity", "Diversion"],
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "budgetCode": {
+          "type": "string",
+          "description": "Administrative cost center code.",
+          "minLength": 3,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the administrator managing this department.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": [
+        "deptId",
+        "name",
+        "headPhysician",
+        "totalBeds",
+        "occupiedBeds",
+        "diversionStatus",
+        "budgetCode",
+        "ownerId",
+        "updatedAt"
+      ]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Medical staff shift attendance, check-in status, and verified hours log.",
+      "type": "object",
+      "properties": {
+        "attendanceId": {
+          "type": "string",
+          "description": "Unique identifier for the attendance record.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "staffUid": {
+          "type": "string",
+          "description": "UID or staff identifier of the medical staff member.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the workspace creator/owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "staffName": {
+          "type": "string",
+          "description": "Display name of the medical staff member.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "badgeId": {
+          "type": "string",
+          "description": "Hospital staff badge code.",
+          "minLength": 3,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "department": {
+          "type": "string",
+          "description": "Assigned clinical department.",
+          "enum": ["Cardiology", "Neurology", "Emergency", "Oncology", "Pediatrics", "ICU", "Administration"],
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "shiftDate": {
+          "type": "string",
+          "description": "ISO date string for the shift (YYYY-MM-DD).",
+          "minLength": 8,
+          "maxLength": 20,
+          "pattern": "^[0-9\\-]+$"
+        },
+        "shiftType": {
+          "type": "string",
+          "description": "Scheduled shift window.",
+          "enum": ["Day (07:00-19:00)", "Night (19:00-07:00)", "On-Call"],
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "attendanceStatus": {
+          "type": "string",
+          "description": "Current shift attendance state.",
+          "enum": ["Present - Checked In", "Completed Shift", "Late Arrival", "On Leave"],
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "clockInNote": {
+          "type": "string",
+          "description": "Shift check-in timestamp note and handover summary.",
+          "minLength": 2,
+          "maxLength": 160
+        },
+        "hoursLogged": {
+          "type": "number",
+          "description": "Total hours logged for this shift (0 to 24)."
+        },
+        "verifiedByAdmin": {
+          "type": "boolean",
+          "description": "Whether Hospital Administration has verified and locked this attendance log."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of attendance creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last attendance update."
+        }
+      },
+      "required": [
+        "attendanceId",
+        "staffUid",
+        "ownerId",
+        "staffName",
+        "badgeId",
+        "department",
+        "shiftDate",
+        "shiftType",
+        "attendanceStatus",
+        "clockInNote",
+        "hoursLogged",
+        "verifiedByAdmin",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable RBAC security and clinical access audit trail entry.",
+      "type": "object",
+      "properties": {
+        "logId": {
+          "type": "string",
+          "description": "Unique identifier for the audit log.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "actorId": {
+          "type": "string",
+          "description": "UID of the authenticated user who triggered the event.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "actorName": {
+          "type": "string",
+          "description": "Display name of the actor.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "actorRole": {
+          "type": "string",
+          "description": "Active role tier at the time of action.",
+          "enum": ["admin", "physician", "nurse", "lab_tech"],
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "action": {
+          "type": "string",
+          "description": "Description of the database operation or RBAC check.",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "targetId": {
+          "type": "string",
+          "description": "Target resource identifier.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "severity": {
+          "type": "string",
+          "description": "Security audit classification.",
+          "enum": ["Info", "Elevated", "Restricted-Blocked"],
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the event."
+        }
+      },
+      "required": [
+        "logId",
+        "actorId",
+        "actorName",
+        "actorRole",
+        "action",
+        "targetId",
+        "severity",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminGrant" },
+      "description": "Trusted administrator membership registry."
+    },
+    "/staff_profiles/{staffId}": {
+      "schema": { "$ref": "#/entities/StaffProfile" },
+      "description": "Non-PII hospital staff profiles and RBAC role assignments."
+    },
+    "/patients/{patientId}": {
+      "schema": { "$ref": "#/entities/PatientRecord" },
+      "description": "Hospital patient records with Tier 1 (Admin) and Tier 2 (Assigned Medical Staff) permissions."
+    },
+    "/patients/{patientId}/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/ClinicalOrder" },
+      "description": "Clinical orders subcollection synchronized with parent patient record."
+    },
+    "/departments/{deptId}": {
+      "schema": { "$ref": "#/entities/DepartmentConfig" },
+      "description": "Hospital ward bed capacity and administrative budget configuration."
+    },
+    "/attendance_logs/{attendanceId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Medical staff shift attendance logs with self-check-in for Tier 2 staff and verification locking for Tier 1 Admins."
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable RBAC and clinical database audit log entries."
+    }
+  }
+}

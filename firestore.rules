@@ -1,0 +1,437 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Global Primitives & RBAC Helpers
+    // =========================================================================
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'subhaanandpps@gmail.com' ||
+        request.auth.token.email == 'subha.anand@bscdsaih.christuniversity.in'
+      );
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // =========================================================================
+    // Validation Blueprints (Anti-Update-Gap)
+    // =========================================================================
+    function isValidAdminGrant(data) {
+      return data.keys().hasAll(['uid', 'grantedBy', 'roleLabel', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'grantedBy', 'roleLabel', 'createdAt']) &&
+        isValidId(data.uid) &&
+        isValidId(data.grantedBy) &&
+        data.grantedBy == request.auth.uid &&
+        data.roleLabel is string && data.roleLabel.size() >= 2 && data.roleLabel.size() <= 64 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidStaffProfile(data) {
+      return data.keys().hasAll(['staffId', 'ownerId', 'fullName', 'role', 'department', 'badgeId', 'shift', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['staffId', 'ownerId', 'fullName', 'role', 'department', 'badgeId', 'shift', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.staffId) &&
+        isValidId(data.ownerId) &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
+        data.role is string && data.role.size() >= 2 && data.role.size() <= 32 &&
+        data.role in ['admin', 'physician', 'nurse', 'lab_tech'] &&
+        data.department is string && data.department.size() >= 2 && data.department.size() <= 40 &&
+        data.department in ['Cardiology', 'Neurology', 'Emergency', 'Oncology', 'Pediatrics', 'ICU', 'Administration'] &&
+        data.badgeId is string && data.badgeId.size() >= 3 && data.badgeId.size() <= 32 && data.badgeId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.shift is string && data.shift.size() >= 2 && data.shift.size() <= 40 &&
+        data.shift in ['Day (07:00-19:00)', 'Night (19:00-07:00)', 'On-Call'] &&
+        data.status is string && data.status.size() >= 2 && data.status.size() <= 32 &&
+        data.status in ['On Duty', 'Off Duty', 'In Surgery'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPatientRecord(data) {
+      return data.keys().hasAll([
+          'patientId', 'mrn', 'fullName', 'age', 'bloodType', 'department',
+          'roomNumber', 'triageStatus', 'diagnosisSummary', 'vitalSigns',
+          'clinicalNotes', 'insuranceStatus', 'assignedStaffId',
+          'assignedStaffName', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'patientId', 'mrn', 'fullName', 'age', 'bloodType', 'department',
+          'roomNumber', 'triageStatus', 'diagnosisSummary', 'vitalSigns',
+          'clinicalNotes', 'insuranceStatus', 'assignedStaffId',
+          'assignedStaffName', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.patientId) &&
+        data.mrn is string && data.mrn.size() >= 4 && data.mrn.size() <= 32 && data.mrn.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
+        data.age is number && data.age >= 0 && data.age <= 130 &&
+        data.bloodType is string && data.bloodType.size() >= 2 && data.bloodType.size() <= 8 &&
+        data.bloodType in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] &&
+        data.department is string && data.department.size() >= 2 && data.department.size() <= 40 &&
+        data.department in ['Cardiology', 'Neurology', 'Emergency', 'Oncology', 'Pediatrics', 'ICU'] &&
+        data.roomNumber is string && data.roomNumber.size() >= 1 && data.roomNumber.size() <= 20 && data.roomNumber.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.triageStatus is string && data.triageStatus.size() >= 2 && data.triageStatus.size() <= 32 &&
+        data.triageStatus in ['Critical', 'Observation', 'Stable', 'Discharged'] &&
+        data.diagnosisSummary is string && data.diagnosisSummary.size() >= 2 && data.diagnosisSummary.size() <= 500 &&
+        data.vitalSigns is string && data.vitalSigns.size() >= 2 && data.vitalSigns.size() <= 200 &&
+        data.clinicalNotes is string && data.clinicalNotes.size() >= 0 && data.clinicalNotes.size() <= 1000 &&
+        data.insuranceStatus is string && data.insuranceStatus.size() >= 2 && data.insuranceStatus.size() <= 32 &&
+        data.insuranceStatus in ['Verified', 'Pending Review', 'Self-Pay', 'Gov-Coverage'] &&
+        isValidId(data.assignedStaffId) &&
+        data.assignedStaffName is string && data.assignedStaffName.size() >= 2 && data.assignedStaffName.size() <= 100 &&
+        isValidId(data.createdBy) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidClinicalOrder(data) {
+      return data.keys().hasAll([
+          'orderId', 'patientId', 'orderType', 'description', 'priority',
+          'orderStatus', 'orderedBy', 'orderedByName', 'assignedStaffId',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'orderId', 'patientId', 'orderType', 'description', 'priority',
+          'orderStatus', 'orderedBy', 'orderedByName', 'assignedStaffId',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.orderId) &&
+        isValidId(data.patientId) &&
+        data.orderType is string && data.orderType.size() >= 2 && data.orderType.size() <= 32 &&
+        data.orderType in ['Medication', 'Lab Panel', 'Imaging', 'Procedure'] &&
+        data.description is string && data.description.size() >= 2 && data.description.size() <= 300 &&
+        data.priority is string && data.priority.size() >= 2 && data.priority.size() <= 20 &&
+        data.priority in ['STAT', 'Urgent', 'Routine'] &&
+        data.orderStatus is string && data.orderStatus.size() >= 2 && data.orderStatus.size() <= 24 &&
+        data.orderStatus in ['Pending', 'In Progress', 'Completed', 'Cancelled'] &&
+        isValidId(data.orderedBy) &&
+        data.orderedByName is string && data.orderedByName.size() >= 2 && data.orderedByName.size() <= 100 &&
+        isValidId(data.assignedStaffId) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDepartmentConfig(data) {
+      return data.keys().hasAll([
+          'deptId', 'name', 'headPhysician', 'totalBeds', 'occupiedBeds',
+          'diversionStatus', 'budgetCode', 'ownerId', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'deptId', 'name', 'headPhysician', 'totalBeds', 'occupiedBeds',
+          'diversionStatus', 'budgetCode', 'ownerId', 'updatedAt'
+        ]) &&
+        isValidId(data.deptId) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 40 &&
+        data.name in ['Cardiology', 'Neurology', 'Emergency', 'Oncology', 'Pediatrics', 'ICU'] &&
+        data.headPhysician is string && data.headPhysician.size() >= 2 && data.headPhysician.size() <= 100 &&
+        data.totalBeds is number && data.totalBeds >= 1 && data.totalBeds <= 500 &&
+        data.occupiedBeds is number && data.occupiedBeds >= 0 && data.occupiedBeds <= data.totalBeds &&
+        data.diversionStatus is string && data.diversionStatus.size() >= 2 && data.diversionStatus.size() <= 32 &&
+        data.diversionStatus in ['Normal Operations', 'Advisory', 'Critical Capacity', 'Diversion'] &&
+        data.budgetCode is string && data.budgetCode.size() >= 3 && data.budgetCode.size() <= 32 && data.budgetCode.matches('^[a-zA-Z0-9_\\-]+$') &&
+        isValidId(data.ownerId) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAttendanceRecord(data) {
+      return data.keys().hasAll([
+          'attendanceId', 'staffUid', 'ownerId', 'staffName', 'badgeId',
+          'department', 'shiftDate', 'shiftType', 'attendanceStatus',
+          'clockInNote', 'hoursLogged', 'verifiedByAdmin', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'attendanceId', 'staffUid', 'ownerId', 'staffName', 'badgeId',
+          'department', 'shiftDate', 'shiftType', 'attendanceStatus',
+          'clockInNote', 'hoursLogged', 'verifiedByAdmin', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.attendanceId) &&
+        isValidId(data.staffUid) &&
+        isValidId(data.ownerId) &&
+        data.staffName is string && data.staffName.size() >= 2 && data.staffName.size() <= 100 &&
+        data.badgeId is string && data.badgeId.size() >= 3 && data.badgeId.size() <= 32 && data.badgeId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.department is string && data.department.size() >= 2 && data.department.size() <= 40 &&
+        data.department in ['Cardiology', 'Neurology', 'Emergency', 'Oncology', 'Pediatrics', 'ICU', 'Administration'] &&
+        data.shiftDate is string && data.shiftDate.size() >= 8 && data.shiftDate.size() <= 20 && data.shiftDate.matches('^[0-9\\-]+$') &&
+        data.shiftType is string && data.shiftType.size() >= 2 && data.shiftType.size() <= 40 &&
+        data.shiftType in ['Day (07:00-19:00)', 'Night (19:00-07:00)', 'On-Call'] &&
+        data.attendanceStatus is string && data.attendanceStatus.size() >= 2 && data.attendanceStatus.size() <= 32 &&
+        data.attendanceStatus in ['Present - Checked In', 'Completed Shift', 'Late Arrival', 'On Leave'] &&
+        data.clockInNote is string && data.clockInNote.size() >= 2 && data.clockInNote.size() <= 160 &&
+        data.hoursLogged is number && data.hoursLogged >= 0 && data.hoursLogged <= 24 &&
+        data.verifiedByAdmin is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll([
+          'logId', 'actorId', 'actorName', 'actorRole', 'action',
+          'targetId', 'severity', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'logId', 'actorId', 'actorName', 'actorRole', 'action',
+          'targetId', 'severity', 'createdAt'
+        ]) &&
+        isValidId(data.logId) &&
+        isValidId(data.actorId) &&
+        data.actorId == request.auth.uid &&
+        data.actorName is string && data.actorName.size() >= 2 && data.actorName.size() <= 100 &&
+        data.actorRole is string && data.actorRole.size() >= 2 && data.actorRole.size() <= 32 &&
+        data.actorRole in ['admin', 'physician', 'nurse', 'lab_tech'] &&
+        data.action is string && data.action.size() >= 2 && data.action.size() <= 120 &&
+        isValidId(data.targetId) &&
+        data.severity is string && data.severity.size() >= 2 && data.severity.size() <= 32 &&
+        data.severity in ['Info', 'Elevated', 'Restricted-Blocked'] &&
+        data.createdAt is timestamp;
+    }
+
+    // 1. /admins/{adminId}
+    match /admins/{adminId} {
+      allow get: if isVerifiedUser() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+      allow list: if isVerifiedUser() && existing().grantedBy == request.auth.uid;
+      allow create: if isVerifiedUser() &&
+        isValidId(adminId) &&
+        isValidAdminGrant(incoming()) &&
+        incoming().uid == adminId &&
+        incoming().createdAt == request.time &&
+        isAdmin();
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(adminId) && isAdmin();
+    }
+
+    // 2. /staff_profiles/{staffId}
+    match /staff_profiles/{staffId} {
+      allow get: if isVerifiedUser() && isValidId(staffId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isVerifiedUser() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() &&
+        isValidId(staffId) &&
+        isValidStaffProfile(incoming()) &&
+        incoming().staffId == staffId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (incoming().role != 'admin' || isAdmin());
+      allow update: if isVerifiedUser() &&
+        isValidId(staffId) &&
+        isValidStaffProfile(incoming()) &&
+        incoming().staffId == existing().staffId &&
+        incoming().ownerId == existing().ownerId &&
+        (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
+        incoming().updatedAt == request.time && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'role', 'department', 'badgeId', 'shift', 'status', 'createdAt', 'updatedAt'])) ||
+          (existing().ownerId == request.auth.uid &&
+            incoming().role != 'admin' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'role', 'department', 'badgeId', 'shift', 'status', 'createdAt', 'updatedAt']))
+        );
+      allow delete: if isVerifiedUser() && isValidId(staffId) && isAdmin();
+    }
+
+    // 3. /patients/{patientId}
+    match /patients/{patientId} {
+      allow get: if isVerifiedUser() && isValidId(patientId) && (
+        existing().assignedStaffId == request.auth.uid ||
+        existing().createdBy == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isVerifiedUser() && (
+        existing().assignedStaffId == request.auth.uid ||
+        existing().createdBy == request.auth.uid
+      );
+      allow create: if isVerifiedUser() &&
+        isValidId(patientId) &&
+        isValidPatientRecord(incoming()) &&
+        incoming().patientId == patientId &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(patientId) &&
+        isValidPatientRecord(incoming()) &&
+        incoming().patientId == existing().patientId &&
+        incoming().mrn == existing().mrn &&
+        incoming().createdBy == existing().createdBy &&
+        (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
+        incoming().updatedAt == request.time && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'fullName', 'age', 'bloodType', 'department', 'roomNumber',
+            'triageStatus', 'diagnosisSummary', 'vitalSigns', 'clinicalNotes',
+            'insuranceStatus', 'assignedStaffId', 'assignedStaffName', 'createdAt', 'updatedAt'
+          ])) ||
+          (existing().createdBy == request.auth.uid &&
+            incoming().createdAt == request.time &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'fullName', 'age', 'bloodType', 'department', 'roomNumber',
+              'triageStatus', 'diagnosisSummary', 'vitalSigns', 'clinicalNotes',
+              'insuranceStatus', 'assignedStaffId', 'assignedStaffName', 'createdAt', 'updatedAt'
+            ])) ||
+          (existing().assignedStaffId == request.auth.uid &&
+            existing().triageStatus != 'Discharged' &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'triageStatus', 'diagnosisSummary', 'vitalSigns', 'clinicalNotes', 'updatedAt'
+            ]))
+        );
+      allow delete: if isVerifiedUser() && isValidId(patientId) && isAdmin();
+
+      // 4. /patients/{patientId}/orders/{orderId}
+      match /orders/{orderId} {
+        function parentPatient() {
+          return get(/databases/$(database)/documents/patients/$(patientId)).data;
+        }
+
+        function isParentAccessible() {
+          return exists(/databases/$(database)/documents/patients/$(patientId)) && (
+            parentPatient().assignedStaffId == request.auth.uid ||
+            parentPatient().createdBy == request.auth.uid ||
+            isAdmin()
+          );
+        }
+
+        allow get: if isVerifiedUser() && isValidId(patientId) && isValidId(orderId) && isParentAccessible();
+        allow list: if isVerifiedUser() && (
+          existing().assignedStaffId == request.auth.uid ||
+          existing().orderedBy == request.auth.uid
+        );
+        allow create: if isVerifiedUser() &&
+          isValidId(patientId) &&
+          isValidId(orderId) &&
+          isValidClinicalOrder(incoming()) &&
+          incoming().orderId == orderId &&
+          incoming().patientId == patientId &&
+          incoming().orderedBy == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          isParentAccessible();
+        allow update: if isVerifiedUser() &&
+          isValidId(patientId) &&
+          isValidId(orderId) &&
+          isValidClinicalOrder(incoming()) &&
+          incoming().orderId == existing().orderId &&
+          incoming().patientId == existing().patientId &&
+          incoming().orderedBy == existing().orderedBy &&
+          (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
+          incoming().updatedAt == request.time &&
+          isParentAccessible() && (
+            (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+              'orderType', 'description', 'priority', 'orderStatus', 'orderedByName', 'assignedStaffId', 'createdAt', 'updatedAt'
+            ])) ||
+            (existing().orderedBy == request.auth.uid &&
+              incoming().createdAt == request.time &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'orderType', 'description', 'priority', 'orderStatus', 'orderedByName', 'assignedStaffId', 'createdAt', 'updatedAt'
+              ])) ||
+            (existing().assignedStaffId == request.auth.uid &&
+              !(existing().orderStatus in ['Completed', 'Cancelled']) &&
+              incoming().diff(existing()).affectedKeys().hasOnly(['orderStatus', 'description', 'updatedAt']))
+          );
+        allow delete: if isVerifiedUser() && isValidId(patientId) && isValidId(orderId) && isAdmin();
+      }
+    }
+
+    // 5. /departments/{deptId}
+    match /departments/{deptId} {
+      allow get: if isVerifiedUser() && isValidId(deptId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isVerifiedUser() && existing().ownerId == request.auth.uid;
+      allow create: if isVerifiedUser() &&
+        isValidId(deptId) &&
+        isValidDepartmentConfig(incoming()) &&
+        incoming().deptId == deptId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(deptId) &&
+        isValidDepartmentConfig(incoming()) &&
+        incoming().deptId == existing().deptId &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || existing().ownerId == request.auth.uid) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'headPhysician', 'totalBeds', 'occupiedBeds', 'diversionStatus', 'budgetCode', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedUser() && isValidId(deptId) && isAdmin();
+    }
+
+    // 6. /attendance_logs/{attendanceId}
+    match /attendance_logs/{attendanceId} {
+      allow get: if isVerifiedUser() && isValidId(attendanceId) && (
+        existing().staffUid == request.auth.uid ||
+        existing().ownerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isVerifiedUser() && (
+        existing().staffUid == request.auth.uid ||
+        existing().ownerId == request.auth.uid
+      );
+      allow create: if isVerifiedUser() &&
+        isValidId(attendanceId) &&
+        isValidAttendanceRecord(incoming()) &&
+        incoming().attendanceId == attendanceId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(attendanceId) &&
+        isValidAttendanceRecord(incoming()) &&
+        incoming().attendanceId == existing().attendanceId &&
+        incoming().staffUid == existing().staffUid &&
+        incoming().ownerId == existing().ownerId &&
+        (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
+        incoming().updatedAt == request.time && (
+          // Tier 1: Admin or Seeder can verify/lock attendance, adjust hours, or update status
+          ((isAdmin() || (existing().ownerId == request.auth.uid && incoming().createdAt == request.time)) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'staffName', 'badgeId', 'department', 'shiftDate', 'shiftType', 'attendanceStatus', 'clockInNote', 'hoursLogged', 'verifiedByAdmin', 'createdAt', 'updatedAt'
+            ])) ||
+          // Tier 2: Medical Staff can update their own shift check-in/out & hours ONLY before Admin verification lock
+          (existing().staffUid == request.auth.uid &&
+            existing().verifiedByAdmin == false &&
+            incoming().verifiedByAdmin == false &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'attendanceStatus', 'clockInNote', 'hoursLogged', 'updatedAt'
+            ]))
+        );
+      allow delete: if isVerifiedUser() && isValidId(attendanceId) && isAdmin();
+    }
+
+    // 7. /audit_logs/{logId}
+    match /audit_logs/{logId} {
+      allow get: if isVerifiedUser() && isValidId(logId) && (existing().actorId == request.auth.uid || isAdmin());
+      allow list: if isVerifiedUser() && existing().actorId == request.auth.uid;
+      allow create: if isVerifiedUser() &&
+        isValidId(logId) &&
+        isValidAuditLog(incoming()) &&
+        incoming().logId == logId &&
+        incoming().actorId == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}
