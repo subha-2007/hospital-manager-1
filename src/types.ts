@@ -142,3 +142,19 @@ export interface AuditLog {
   severity: AuditSeverity;
   createdAt: Timestamp;
 }
+
+export type UserAccessStatus = 'Active' | 'Suspended' | 'Pending';
+
+export interface UserAccessRecord {
+  accessId: string;
+  email: string;
+  fullName: string;
+  accessType: StaffRole;
+  department: DepartmentName;
+  badgeId: string;
+  status: UserAccessStatus;
+  ownerId: string;
+  assignedByName: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}

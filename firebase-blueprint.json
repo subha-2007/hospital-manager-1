@@ -579,6 +579,90 @@
         "severity",
         "createdAt"
       ]
+    },
+    "UserAccess": {
+      "title": "UserAccess",
+      "description": "Registered email authorizations and RBAC access tier management.",
+      "type": "object",
+      "properties": {
+        "accessId": {
+          "type": "string",
+          "description": "Unique identifier for the user access record.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "description": "Registered email address.",
+          "minLength": 5,
+          "maxLength": 100
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Full name of the authorized staff user.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "accessType": {
+          "type": "string",
+          "description": "Assigned RBAC role tier.",
+          "enum": ["admin", "physician", "nurse", "lab_tech"]
+        },
+        "department": {
+          "type": "string",
+          "description": "Assigned hospital department.",
+          "enum": ["Cardiology", "Neurology", "Emergency", "Oncology", "Pediatrics", "ICU", "Administration"]
+        },
+        "badgeId": {
+          "type": "string",
+          "description": "Physical security badge identifier.",
+          "minLength": 3,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "status": {
+          "type": "string",
+          "description": "Account authorization status.",
+          "enum": ["Active", "Suspended", "Pending"]
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "UID of the granting admin.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "assignedByName": {
+          "type": "string",
+          "description": "Display name of the admin who granted or modified access.",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the email was registered."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when access was last modified."
+        }
+      },
+      "required": [
+        "accessId",
+        "email",
+        "fullName",
+        "accessType",
+        "department",
+        "badgeId",
+        "status",
+        "ownerId",
+        "assignedByName",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -609,6 +693,10 @@
     "/audit_logs/{logId}": {
       "schema": { "$ref": "#/entities/AuditLog" },
       "description": "Immutable RBAC and clinical database audit log entries."
+    },
+    "/user_access/{accessId}": {
+      "schema": { "$ref": "#/entities/UserAccess" },
+      "description": "Registered email authorizations and RBAC access tier management."
     }
   }
 }

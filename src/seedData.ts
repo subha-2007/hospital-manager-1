@@ -541,4 +541,98 @@ export async function seedHospitalDatabase(userUid: string, userDisplayName: str
       handleFirestoreError(error, OperationType.CREATE, path);
     }
   }
+
+  // 7. Seed Initial Registered User Email Authorizations (/user_access/{accessId})
+  const userAccessList = [
+    {
+      accessId: `acc_${uTag}_admin_01`,
+      email: 'subhaanandpps@gmail.com',
+      fullName: 'Super Administrator',
+      accessType: 'admin' as const,
+      department: 'Administration' as const,
+      badgeId: 'BDG-ADM-001',
+      status: 'Active' as const,
+      ownerId: userUid,
+      assignedByName: clinicianName,
+    },
+    {
+      accessId: `acc_${uTag}_admin_02`,
+      email: 'subha.anand@bscdsaih.christuniversity.in',
+      fullName: 'Academic Medical Admin',
+      accessType: 'admin' as const,
+      department: 'Administration' as const,
+      badgeId: 'BDG-ADM-002',
+      status: 'Active' as const,
+      ownerId: userUid,
+      assignedByName: clinicianName,
+    },
+    {
+      accessId: `acc_${uTag}_mei_lin`,
+      email: 'dr.meilin@hospital.org',
+      fullName: 'Dr. Mei Lin, MD',
+      accessType: 'physician' as const,
+      department: 'Cardiology' as const,
+      badgeId: 'BDG-PHY-104',
+      status: 'Active' as const,
+      ownerId: userUid,
+      assignedByName: clinicianName,
+    },
+    {
+      accessId: `acc_${uTag}_chidi_okafor`,
+      email: 'rn.chidi@hospital.org',
+      fullName: 'Chidi Okafor, RN BSN',
+      accessType: 'nurse' as const,
+      department: 'ICU' as const,
+      badgeId: 'BDG-NRS-219',
+      status: 'Active' as const,
+      ownerId: userUid,
+      assignedByName: clinicianName,
+    },
+    {
+      accessId: `acc_${uTag}_julian_vance`,
+      email: 'dr.julian@hospital.org',
+      fullName: 'Dr. Julian Vance, MD',
+      accessType: 'physician' as const,
+      department: 'Emergency' as const,
+      badgeId: 'BDG-PHY-308',
+      status: 'Active' as const,
+      ownerId: userUid,
+      assignedByName: clinicianName,
+    },
+    {
+      accessId: `acc_${uTag}_sarah_jenkins`,
+      email: 'sarah.jenkins@hospital.org',
+      fullName: 'Sarah Jenkins, MLS',
+      accessType: 'lab_tech' as const,
+      department: 'Oncology' as const,
+      badgeId: 'BDG-LAB-412',
+      status: 'Active' as const,
+      ownerId: userUid,
+      assignedByName: clinicianName,
+    },
+    {
+      accessId: `acc_${uTag}_lucas_ross`,
+      email: 'resident.ross@hospital.org',
+      fullName: 'Dr. Lucas Ross, MD',
+      accessType: 'physician' as const,
+      department: 'Pediatrics' as const,
+      badgeId: 'BDG-PHY-512',
+      status: 'Pending' as const,
+      ownerId: userUid,
+      assignedByName: clinicianName,
+    },
+  ];
+
+  for (const acc of userAccessList) {
+    const path = `user_access/${acc.accessId}`;
+    try {
+      await setDoc(doc(db, 'user_access', acc.accessId), {
+        ...acc,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  }
 }

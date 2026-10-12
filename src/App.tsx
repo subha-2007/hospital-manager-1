@@ -35,12 +35,14 @@ import {
   ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
+  Terminal,
   Trash2,
   Unlock,
   UserCheck,
   Users,
   X,
 } from 'lucide-react';
+import { MySQLWorkbenchView } from './MySQLWorkbenchView';
 import {
   auth,
   BOOTSTRAPPED_ADMIN_EMAIL,
@@ -54,6 +56,7 @@ import {
 } from './firebase';
 import { seedHospitalDatabase } from './seedData';
 import { AttendanceAndCaseloadView } from './AttendanceAndCaseloadView';
+import { UserAccessManagementView } from './UserAccessManagementView';
 import {
   AttendanceRecord,
   AttendanceStatus,
@@ -75,9 +78,19 @@ import {
   StaffProfile,
   StaffRole,
   TriageStatus,
+  UserAccessRecord,
+  UserAccessStatus,
 } from './types';
 
-type ActiveTab = 'patients' | 'attendance' | 'orders' | 'departments' | 'staff' | 'rbac';
+type ActiveTab =
+  | 'patients'
+  | 'attendance'
+  | 'orders'
+  | 'departments'
+  | 'staff'
+  | 'access'
+  | 'rbac'
+  | 'workbench';
 type AccessTierMode = 'admin' | 'medical_staff';
 
 const CLINICAL_WARDS: ClinicalWard[] = [
@@ -134,6 +147,7 @@ export default function App() {
   const [staffProfiles, setStaffProfiles] = useState<StaffProfile[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [userAccessRecords, setUserAccessRecords] = useState<UserAccessRecord[]>([]);
   const [hasAdminGrantDoc, setHasAdminGrantDoc] = useState(false);
 
   // UI Filter & Action states
@@ -276,12 +290,13 @@ export default function App() {
     return () => unsub();
   }, [authReady, user, selectedPatientId, isAdminActive]);
 
-  // 5. Real-time Departments, Staff Profiles, and Audit Logs Listeners
+  // 5. Real-time Departments, Staff Profiles, Audit Logs, and User Access Listeners
   useEffect(() => {
     if (!authReady || !user) {
       setDepartments([]);
       setStaffProfiles([]);
       setAuditLogs([]);
+      setUserAccessRecords([]);
       return;
     }
 
@@ -325,6 +340,18 @@ export default function App() {
       (error) => handleFirestoreError(error, OperationType.LIST, 'audit_logs')
     );
 
+    const accessQ = query(collection(db, 'user_access'), where('ownerId', '==', user.uid));
+    const unsubAccess = onSnapshot(
+      accessQ,
+      (snap) => {
+        const list: UserAccessRecord[] = [];
+        snap.forEach((d) => list.push(d.data() as UserAccessRecord));
+        list.sort((a, b) => a.fullName.localeCompare(b.fullName));
+        setUserAccessRecords(list);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'user_access')
+    );
+
     const attFilterField = isAdminActive ? 'ownerId' : 'staffUid';
     const attQ = query(collection(db, 'attendance_logs'), where(attFilterField, '==', user.uid));
     const unsubAttendance = onSnapshot(
@@ -342,6 +369,7 @@ export default function App() {
       unsubDepts();
       unsubStaff();
       unsubAudit();
+      unsubAccess();
       unsubAttendance();
     };
   }, [authReady, user, isAdminActive]);
@@ -368,6 +396,107 @@ export default function App() {
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  }
+
+  // User Access & Email Authorization CRUD Handlers (Admin Only)
+  async function handleCreateUserAccess(data: {
+    email: string;
+    fullName: string;
+    accessType: StaffRole;
+    department: DepartmentName;
+    badgeId: string;
+    status: UserAccessStatus;
+  }) {
+    if (!user || !isAdminActive) return;
+    const uTag = user.uid.slice(0, 8).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeEmailTag = data.email.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20);
+    const accessId = sanitizeId(`acc_${uTag}_${safeEmailTag}_${Date.now().toString(36)}`);
+    const path = `user_access/${accessId}`;
+
+    try {
+      await setDoc(doc(db, 'user_access', accessId), {
+        accessId,
+        email: data.email.toLowerCase().trim(),
+        fullName: clampString(data.fullName, 2, 100),
+        accessType: data.accessType,
+        department: data.department,
+        badgeId: sanitizeId(data.badgeId, 32),
+        status: data.status,
+        ownerId: user.uid,
+        assignedByName: clampString(user.displayName || user.email || 'Hospital Administrator', 2, 100),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      await recordAuditEvent(
+        `Authorized new registered email ${data.email} with access role ${data.accessType}`,
+        accessId,
+        'Elevated'
+      );
+      setBannerMessage({
+        type: 'success',
+        text: `Granted ${data.accessType.toUpperCase()} role access to ${data.email}.`,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, path);
+    }
+  }
+
+  async function handleUpdateUserAccess(
+    accessId: string,
+    updates: Partial<{
+      fullName: string;
+      accessType: StaffRole;
+      department: DepartmentName;
+      badgeId: string;
+      status: UserAccessStatus;
+    }>
+  ) {
+    if (!user || !isAdminActive) return;
+    const path = `user_access/${accessId}`;
+    try {
+      const sanitizedUpdates: Record<string, unknown> = {
+        updatedAt: serverTimestamp(),
+      };
+      if (updates.fullName !== undefined) sanitizedUpdates.fullName = clampString(updates.fullName, 2, 100);
+      if (updates.accessType !== undefined) sanitizedUpdates.accessType = updates.accessType;
+      if (updates.department !== undefined) sanitizedUpdates.department = updates.department;
+      if (updates.badgeId !== undefined) sanitizedUpdates.badgeId = sanitizeId(updates.badgeId, 32);
+      if (updates.status !== undefined) sanitizedUpdates.status = updates.status;
+
+      await updateDoc(doc(db, 'user_access', accessId), sanitizedUpdates);
+
+      await recordAuditEvent(
+        `Updated permissions for access ID ${accessId}: ${Object.keys(updates).join(', ')}`,
+        accessId,
+        'Elevated'
+      );
+      setBannerMessage({
+        type: 'success',
+        text: `Updated access permissions for record ${accessId}.`,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  }
+
+  async function handleDeleteUserAccess(accessId: string, email: string) {
+    if (!user || !isAdminActive) return;
+    const path = `user_access/${accessId}`;
+    try {
+      await deleteDoc(doc(db, 'user_access', accessId));
+      await recordAuditEvent(
+        `Revoked and deleted registered email access for ${email}`,
+        accessId,
+        'Elevated'
+      );
+      setBannerMessage({
+        type: 'warning',
+        text: `Revoked access record for ${email}.`,
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
     }
   }
 
@@ -1186,6 +1315,26 @@ export default function App() {
             Staff & Roles
           </button>
           <button
+            onClick={() => setActiveTab('access')}
+            className={`py-1 transition-colors whitespace-nowrap cursor-pointer border-b-2 flex items-center gap-1.5 ${
+              activeTab === 'access'
+                ? 'border-blue-600 text-blue-600 font-semibold'
+                : 'border-transparent hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>User Email Access</span>
+            <span
+              className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold border ${
+                isAdminActive
+                  ? 'bg-amber-100 text-amber-800 border-amber-200'
+                  : 'bg-slate-100 text-slate-500 border-slate-200'
+              }`}
+            >
+              {isAdminActive ? 'Admin' : 'Locked'}
+            </span>
+          </button>
+          <button
             onClick={() => setActiveTab('rbac')}
             className={`py-1 transition-colors whitespace-nowrap cursor-pointer border-b-2 ${
               activeTab === 'rbac'
@@ -1194,6 +1343,26 @@ export default function App() {
             }`}
           >
             RBAC Policy & Audit
+          </button>
+          <button
+            onClick={() => setActiveTab('workbench')}
+            className={`py-1 transition-colors whitespace-nowrap cursor-pointer border-b-2 flex items-center gap-1.5 ${
+              activeTab === 'workbench'
+                ? 'border-blue-600 text-blue-600 font-semibold'
+                : 'border-transparent hover:text-slate-900'
+            }`}
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span>MySQL Workbench & DML</span>
+            <span
+              className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold border ${
+                isAdminActive
+                  ? 'bg-amber-100 text-amber-800 border-amber-200'
+                  : 'bg-slate-100 text-slate-500 border-slate-200'
+              }`}
+            >
+              {isAdminActive ? 'Admin' : 'Locked'}
+            </span>
           </button>
         </nav>
 
@@ -1263,7 +1432,9 @@ export default function App() {
             ['orders', 'Clinical Orders'],
             ['departments', 'Ward Capacity'],
             ['staff', 'Staff & Roles'],
+            ['access', 'User Email Access'],
             ['rbac', 'RBAC & Audit'],
+            ['workbench', 'MySQL Workbench & DML'],
           ] as [ActiveTab, string][]
         ).map(([key, label]) => (
           <button
@@ -2185,7 +2356,25 @@ export default function App() {
         )}
 
         {/* ===================================================================
-            TAB 5: RBAC POLICY MATRIX & IMMUTABLE SECURITY AUDIT LOG
+            TAB 5: USER EMAIL ACCESS & RBAC AUTHORIZATION DIRECTORY (Admin Governed)
+           =================================================================== */}
+        {activeTab === 'access' && (
+          <UserAccessManagementView
+            isAdminActive={isAdminActive}
+            userUid={user.uid}
+            userDisplayName={user.displayName || user.email || 'Hospital Administrator'}
+            userEmail={user.email}
+            userAccessRecords={userAccessRecords}
+            onCreateUserAccess={handleCreateUserAccess}
+            onUpdateUserAccess={handleUpdateUserAccess}
+            onDeleteUserAccess={handleDeleteUserAccess}
+            recordAuditEvent={recordAuditEvent}
+            onSwitchToAdmin={() => setAccessMode('admin')}
+          />
+        )}
+
+        {/* ===================================================================
+            TAB 6: RBAC POLICY MATRIX & IMMUTABLE SECURITY AUDIT LOG
            =================================================================== */}
         {activeTab === 'rbac' && (
           <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -2320,6 +2509,26 @@ export default function App() {
               </div>
             </div>
           </section>
+        )}
+
+        {/* ===================================================================
+            TAB 6: MYSQL WORKBENCH & NORMAL VISUAL DML COMMAND CENTER (Admin Only)
+           =================================================================== */}
+        {activeTab === 'workbench' && (
+          <MySQLWorkbenchView
+            isAdminActive={isAdminActive}
+            patients={patients}
+            departments={departments}
+            staffProfiles={staffProfiles}
+            attendanceRecords={attendanceRecords}
+            orders={orders}
+            auditLogs={auditLogs}
+            userAccessRecords={userAccessRecords}
+            userUid={user.uid}
+            userDisplayName={user.displayName || 'Dr. Attending Clinician'}
+            recordAuditEvent={recordAuditEvent}
+            onSwitchToAdmin={() => setAccessMode('admin')}
+          />
         )}
       </main>
 

@@ -213,6 +213,28 @@ service cloud.firestore {
         data.createdAt is timestamp;
     }
 
+    function isValidUserAccess(data) {
+      return data.keys().hasAll([
+          'accessId', 'email', 'fullName', 'accessType', 'department',
+          'badgeId', 'status', 'ownerId', 'assignedByName', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'accessId', 'email', 'fullName', 'accessType', 'department',
+          'badgeId', 'status', 'ownerId', 'assignedByName', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.accessId) &&
+        data.email is string && data.email.size() >= 5 && data.email.size() <= 100 &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
+        data.accessType is string && data.accessType in ['admin', 'physician', 'nurse', 'lab_tech'] &&
+        data.department is string && data.department in ['Cardiology', 'Neurology', 'Emergency', 'Oncology', 'Pediatrics', 'ICU', 'Administration'] &&
+        data.badgeId is string && data.badgeId.size() >= 3 && data.badgeId.size() <= 32 && data.badgeId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.status is string && data.status in ['Active', 'Suspended', 'Pending'] &&
+        isValidId(data.ownerId) &&
+        data.assignedByName is string && data.assignedByName.size() >= 2 && data.assignedByName.size() <= 100 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
     // 1. /admins/{adminId}
     match /admins/{adminId} {
       allow get: if isVerifiedUser() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
@@ -432,6 +454,32 @@ service cloud.firestore {
         incoming().createdAt == request.time;
       allow update: if false;
       allow delete: if false;
+    }
+
+    // 8. /user_access/{accessId}
+    match /user_access/{accessId} {
+      allow get: if isVerifiedUser() && isValidId(accessId) && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isVerifiedUser() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() &&
+        isValidId(accessId) &&
+        isValidUserAccess(incoming()) &&
+        incoming().accessId == accessId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || incoming().ownerId == request.auth.uid);
+      allow update: if isVerifiedUser() &&
+        isValidId(accessId) &&
+        isValidUserAccess(incoming()) &&
+        incoming().accessId == existing().accessId &&
+        incoming().ownerId == existing().ownerId &&
+        (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
+        incoming().updatedAt == request.time &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'fullName', 'accessType', 'department', 'badgeId', 'status', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedUser() && isValidId(accessId) && isAdmin();
     }
   }
 }
